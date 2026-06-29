@@ -1,366 +1,98 @@
-# CamTech Chatbot
+# CamTech University Chatbot [Project Base Learning]
 
-## Data Directory Structure
+A highly capable conversational chatbot designed for CamTech University, built using a modern Retrieval-Augmented Generation (RAG) architecture. The chatbot allows users to query information naturally, retaining conversational context across interactions.
 
-```
-data/
-  about_camtech.md
-  faculties.md
-  research_and_innovation.md
-  admissions/
-    Academic_Info_ENG_2023_2024.md
-    ai_university.md
-    application_process.md
-  bachelor_degree/
-    built_enviroment/
-      architectures.md
-      interior_design.md
-    business/
-      business_and_risk.md
-    engineering/
-      cybersecurity.md
-      data_science_and_ai.md
-      robotic_and_automation.md
-      software_engineer.md
-  masters_and_PhD/
-    school_of_graduate_studies.md
-  school_of_contuing_edu/
-    business_data_driven.md
-    digital_skill_business_success.md
-    profess_cert_teaching_methods.md
-```
+## 🌟 Key Features
 
-**============== Chunking Process Splitting Document  ==========================**
-This code is doing **Markdown-aware chunking**. Instead of splitting text randomly every 500 characters, it splits according to your Markdown headings (`#`, `##`, `###`).
+*   **Conversational Memory**: Remembers past interactions within a session for natural back-and-forth conversations.
+*   **RAG Architecture**: Leverages vector embeddings to provide accurate, context-aware answers based on institutional data.
+*   **Vector Database**: Uses PostgreSQL with the `pgvector` extension for efficient and scalable semantic search.
+*   **Multi-Interface Support**: Provides both a Command-Line Interface (CLI) for testing and a FastAPI backend for web integration.
+*   **Modern Python Tooling**: Managed with `uv` for lightning-fast dependency resolution and isolated environments.
 
-Let's go through it line by line.
+## 🛠️ Technology Stack
 
----
+*   **Language**: Python 3.12+
+*   **Frameworks**: [LangChain](https://python.langchain.com/) for LLM orchestration, [FastAPI](https://fastapi.tiangolo.com/) for the API.
+*   **Database**: PostgreSQL with `pgvector` (via Docker).
+*   **Package Management**: `uv`.
+*   **Containerization**: Docker & Docker Compose.
 
-## Step 1: Create the Markdown splitter
+## 📋 Prerequisites
 
-```python
-markdown_splitter = MarkdownHeaderTextSplitter(
-    headers_to_split_on=[
-        ("#", "H1"),
-        ("##", "H2"),
-        ("###", "H3")
-    ]
-)
+Before you begin, ensure you have the following installed:
+
+*   [Python 3.12+](https://www.python.org/downloads/)
+*   [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+*   [uv](https://docs.astral.sh/uv/) (Python package manager)
+
+## 🚀 Getting Started
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd camtech_chatbot
 ```
 
-This tells LangChain:
+### 2. Environment Setup
 
-| Markdown | Metadata Name |
-| -------- | ------------- |
-| `#`      | H1            |
-| `##`     | H2            |
-| `###`    | H3            |
+Create a `.env` file in the root directory and configure your necessary API keys and database credentials. You can use the provided `.env` if available or set up variables like your LLM provider keys (e.g., Google GenAI, Groq).
 
-Example Markdown:
+### 3. Start the Vector Database
 
-```markdown
-# Admissions
+The project uses Docker Compose to easily spin up a PostgreSQL instance pre-configured with `pgvector`.
 
-General admission information.
+```bash
+docker-compose up -d
+```
+*Note: This runs the database on port `5432`.*
 
-## Required Documents
+### 4. Install Dependencies
 
-Bring transcript and diploma.
+Use `uv` to sync the project dependencies:
 
-## Application Process
-
-Submit online application.
-
-### Step 1
-
-Create account.
-
-### Step 2
-
-Upload documents.
+```bash
+uv sync
 ```
 
-The splitter understands the document hierarchy.
+### 5. Running the Application
 
----
+You can interact with the chatbot in two ways:
 
-## Step 2: Create an empty list
+#### Option A: Command Line Interface (Interactive)
+To launch the terminal-based chat session, run:
+```bash
+uv run python main.py
+```
+Type your questions directly in the terminal, and type `exit` or `quit` to end the conversation.
 
-```python
-md_docs = []
+#### Option B: REST API (FastAPI)
+To start the backend API server, you can run the Docker container or use uvicorn directly:
+```bash
+uv run uvicorn src.api.main:app --reload
+```
+The API will be available at `http://localhost:8000`. You can view the interactive API documentation at `http://localhost:8000/docs`.
+
+Alternatively, build and run the entire application via Docker:
+```bash
+docker build -t camtech-chatbot .
+docker run -p 8000:8000 camtech-chatbot
 ```
 
-This list will store all the chunks after splitting.
-
-Initially:
-
-```python
-md_docs = []
-```
-
----
-
-## Step 3: Loop through all loaded documents
-
-```python
-for doc in documents:
-```
-
-Suppose:
-
-```python
-documents
-```
-
-contains:
-
-```python
-[
-    Document(source="admissions.md"),
-    Document(source="faculties.md"),
-    Document(source="about_camtech.md")
-]
-```
-
-The loop processes them one by one.
-
----
-
-## Step 4: Split the document
-
-```python
-splits = markdown_splitter.split_text(doc.page_content)
-```
-
-Suppose `doc.page_content` is:
-
-```markdown
-# Admissions
-
-General information.
-
-## Required Documents
-
-Transcript
-Diploma
-
-## Application Process
-
-Apply online.
-```
-
-After splitting:
-
-```python
-splits
-```
-
-becomes approximately:
-
-```python
-[
-    Document(
-        page_content="General information.",
-        metadata={"H1": "Admissions"}
-    ),
-
-    Document(
-        page_content="Transcript\nDiploma",
-        metadata={
-            "H1": "Admissions",
-            "H2": "Required Documents"
-        }
-    ),
-
-    Document(
-        page_content="Apply online.",
-        metadata={
-            "H1": "Admissions",
-            "H2": "Application Process"
-        }
-    )
-]
-```
-
-Notice:
-
-* Text is separated by section
-* Heading information is stored in metadata
-
-This is extremely useful for RAG.
-
----
-
-## Step 5: Preserve the original file source
-
-```python
-for split in splits:
-    split.metadata['source'] = doc.metadata.get(
-        'source',
-        'unknown'
-    )
-```
-
-Before this:
-
-```python
-{
-    "H1": "Admissions",
-    "H2": "Required Documents"
-}
-```
-
-After this:
-
-```python
-{
-    "H1": "Admissions",
-    "H2": "Required Documents",
-    "source": "../data/admissions/application_process.md"
-}
-```
-
-Now each chunk remembers which file it came from.
-
-Without this, you might lose source tracking.
-
----
-
-## Step 6: Add chunks to the final list
-
-```python
-md_docs.extend(splits)
-```
-
-Suppose:
-
-```python
-splits = [
-    chunk1,
-    chunk2,
-    chunk3
-]
-```
-
-Then:
-
-```python
-md_docs.extend(splits)
-```
-
-is similar to:
-
-```python
-md_docs.append(chunk1)
-md_docs.append(chunk2)
-md_docs.append(chunk3)
-```
-
-After processing all files:
-
-```python
-md_docs
-```
-
-contains every chunk from every Markdown file.
-
----
-
-# Visual Example
-
-Suppose you have:
-
-```markdown
-# Bachelor of Data Science and AI
-
-The program lasts 4 years.
-
-## Career Opportunities
-
-Graduates can become:
-- Data Scientists
-- AI Engineers
-
-## Curriculum
-
-Students learn:
-- Python
-- Machine Learning
-```
-
-After splitting:
-
-### Chunk 1
-
-```python
-{
-    "page_content":
-        "The program lasts 4 years.",
-
-    "metadata": {
-        "H1": "Bachelor of Data Science and AI"
-    }
-}
-```
-
-### Chunk 2
-
-```python
-{
-    "page_content":
-        "Graduates can become Data Scientists and AI Engineers.",
-
-    "metadata": {
-        "H1": "Bachelor of Data Science and AI",
-        "H2": "Career Opportunities"
-    }
-}
-```
-
-### Chunk 3
-
-```python
-{
-    "page_content":
-        "Students learn Python and Machine Learning.",
-
-    "metadata": {
-        "H1": "Bachelor of Data Science and AI",
-        "H2": "Curriculum"
-    }
-}
-```
-
----
-
-# Why this is good for your CamTech chatbot
-
-If a user asks:
-
-> What careers can Data Science students pursue?
-
-The vector search can retrieve:
+## 📁 Project Structure
 
 ```text
-Graduates can become:
-- Data Scientists
-- AI Engineers
+camtech_chatbot/
+├── .env                  # Environment variables and API keys
+├── docker-compose.yml    # Defines the PostgreSQL vector database
+├── Dockerfile            # Instructions for containerizing the API
+├── main.py               # Entry point for the CLI conversational bot
+├── pyproject.toml        # Project metadata and dependencies (uv)
+├── uv.lock               # Dependency lockfile
+└── src/
+    ├── api/              # FastAPI application and endpoints
+    ├── bot/              # LangChain RAG setup and chains
+    ├── ingestion/        # Scripts to process and load data into pgvector
+    └── config.py         # Application configuration
 ```
-
-And the metadata tells the LLM:
-
-```python
-{
-    "H1": "Bachelor of Data Science and AI",
-    "H2": "Career Opportunities"
-}
-```
-
-So the model knows the context is specifically:
-
-> Career Opportunities under the Bachelor of Data Science and AI program.
-
-This usually performs much better than embedding an entire 5-page document as one chunk.
-
-**========================= End =====================================**

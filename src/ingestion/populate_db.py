@@ -1,28 +1,30 @@
 import os
 import sys
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
+#                                read mutiple files from folder # reads a text file
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+#                                Their job is to break large documents into smaller chunks.    
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_postgres import PGVector
 
-# Add parent directory to path to import config
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import config
+# add parent directory to path to import config
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from src import config
 
 def main():
     # 1. Load the data
-    print(f"Loading markdown files from {config.DOCUMENTS_DIR}...")
+    print(f"Loading markdown files from {config.DOCUMENTS_DIR}....")
     loader = DirectoryLoader(
-        config.DOCUMENTS_DIR, 
-        glob="**/*.md", 
+        config.DOCUMENTS_DIR,
+        glob="**/*.md",
         loader_cls=lambda path: TextLoader(path, encoding="utf-8")
     )
     documents = loader.load()
-    
+
     if not documents:
         print("No markdown files found! Please check your data directory.")
         return
-
+    
     print(f"Loaded {len(documents)} documents.")
 
     # 2. Split the data based on Markdown Headers
@@ -33,44 +35,46 @@ def main():
         ("###", "H3"),
     ]
     markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-    
+
     md_docs = []
     for doc in documents:
         splits = markdown_splitter.split_text(doc.page_content)
         for split in splits:
             split.metadata['source'] = doc.metadata.get('source', 'unknown')
-        md_docs.extend(splits)
 
-    # 3. Secondary chunking for large sections
+        md_docs.extend(splits)
+    
+    # 3. Secondary chunking for large section
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=config.CHUNK_SIZE, 
-        chunk_overlap=config.CHUNK_OVERLAP
+        chunk_size = config.CHUNK_SIZE,
+        chunk_overlap = config.CHUNK_OVERLAP
     )
+
     final_chunks = text_splitter.split_documents(md_docs)
     print(f"Created {len(final_chunks)} total chunks.")
 
-    # 4. Create Embeddings
-    print(f"Initializing embeddings model: {config.EMBEDDING_MODEL}...")
+    # 4. Creaate Embeddings
+    print(f"Initializeing embedding model: {config.EMBEDDING_MODEL}...")
     encode_kwargs = {"prompt_name": "STS"}
-    
+
     embeddings = HuggingFaceEmbeddings(
-        model_name=config.EMBEDDING_MODEL,
-        encode_kwargs=encode_kwargs
+        model_name = config.EMBEDDING_MODEL,
+        encode_kwargs = encode_kwargs
     )
 
     # 5. Save to Postgres
     print(f"Connecting to database: {config.CONNECTION_STRING}")
-    try:
+    try: 
         vectorstore = PGVector.from_documents(
             documents=final_chunks,
             embedding=embeddings,
             collection_name=config.COLLECTION_NAME,
-            connection=config.CONNECTION_STRING,
+            connection= config.CONNECTION_STRING,
             use_jsonb=True
         )
-        print("✅ Successfully ingested data into PostgreSQL!")
+        print("Successfully ingested data into PostgresSQL")
     except Exception as e:
-        print(f"❌ Failed to connect to database. Make sure it is running. Error: {e}")
+        print(f"Failed to connect to database. Make sure it is running. Error {e}")
 
 if __name__ == "__main__":
     main()
